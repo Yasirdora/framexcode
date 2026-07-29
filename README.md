@@ -1,10 +1,24 @@
 # framecode
 
+[![CI](https://github.com/Yasirdora/framexcode/actions/workflows/ci.yml/badge.svg)](https://github.com/Yasirdora/framexcode/actions/workflows/ci.yml)
+
 Frame-indexed timestamps for fixed-rate media.
 
 `framecode` converts frame numbers to integer microseconds. It accepts rational
 frame rates, calculates each boundary independently, and lets an export loop
 advance or seek without relying on elapsed wall time. No runtime dependencies.
+
+## Why
+
+A 29.97 fps video runs at exactly 30000/1001 fps, so each frame lasts
+33,366.67 µs. A common shortcut is to round that once to 33,367 µs and keep
+adding it. Each frame then comes out 1/3 µs too long. An hour of video holds
+about 107,900 frames, so by the end of the hour the timestamps are 36 ms
+ahead, more than a whole frame.
+
+`framecode` computes every frame's start directly from its index instead. Each
+timestamp is within half a microsecond of the exact value, however long the
+export runs.
 
 ## Example
 
