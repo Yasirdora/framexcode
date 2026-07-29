@@ -8,9 +8,10 @@ export interface FrameTiming {
   readonly duration: number;
 }
 const MAX = BigInt(Number.MAX_SAFE_INTEGER);
-function integer(value: number, name: string, minimum = 0): void {
+function integer(value: number, name: string, minimum = 0): number {
   if (!Number.isSafeInteger(value) || value < minimum)
     throw new RangeError(`${name} must be a safe integer >= ${minimum}`);
+  return value + 0; // Normalizes -0 to 0.
 }
 function safeNumber(value: bigint): number {
   if (value > MAX) throw new RangeError('Timestamp exceeds the safe integer range');
@@ -26,17 +27,19 @@ export function frameRate(numerator: number, denominator = 1): FrameRate {
 }
 /** A clock advances only when next() is called. Timestamps are in microseconds. */
 export class FrameClock {
-  readonly rate: FrameRate;
+  #rate: FrameRate;
   #frame = 0;
   #scale: bigint;
   #divisor: bigint;
   constructor(rate: FrameRate) {
-    this.rate = frameRate(rate.numerator, rate.denominator);
-    this.#scale = BigInt(this.rate.denominator) * 1_000_000n;
-    this.#divisor = BigInt(this.rate.numerator);
+    this.#rate = frameRate(rate.numerator, rate.denominator);
+    this.#scale = BigInt(this.#rate.denominator) * 1_000_000n;
+    this.#divisor = BigInt(this.#rate.numerator);
     if (this.#divisor > this.#scale)
       throw new RangeError('Frame rate exceeds microsecond resolution');
+    this.at(0); // Reject rates too slow for the first frame to end at a safe timestamp.
   }
+  get rate(): FrameRate { return this.#rate; }
   get position(): number { return this.#frame; }
   /** Nearest microsecond, with exact half values rounded up. */
   timestampAt(frame: number): number {
@@ -46,7 +49,7 @@ export class FrameClock {
   }
   /** Adjacent rounded boundaries define duration; durations need not be equal. */
   at(frame: number): FrameTiming {
-    integer(frame, 'frame');
+    frame = integer(frame, 'frame');
     integer(frame + 1, 'next frame');
     const timestamp = this.timestampAt(frame);
     return Object.freeze({ frame, timestamp, duration: this.timestampAt(frame + 1) - timestamp });
@@ -59,8 +62,7 @@ export class FrameClock {
     return safeNumber(n);
   }
   seek(frame: number): void {
-    this.at(frame); // Validate before changing state.
-    this.#frame = frame;
+    this.#frame = this.at(frame).frame; // Validated and normalized before changing state.
   }
   reset(): void { this.#frame = 0; }
   next(): FrameTiming {

@@ -3,12 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "description": "Frame-indexed timestamps for fixed-rate media.",
+  "license": "MIT",
   "type": "module",
   "sideEffects": false,
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     }
   },
   "files": [

@@ -49,7 +49,7 @@ Use `frameRate(30000, 1001)` for that exact ratio. `frameRate(2997, 100)` repres
 | --- | --- |
 | `frameRate(numerator, denominator = 1)` | Frozen, reduced frames-per-second ratio. |
 | `new FrameClock(rate)` | Clock positioned at frame zero. Copies the supplied ratio. |
-| `clock.rate` | Reduced frame rate. |
+| `clock.rate` | Reduced frame rate. Read-only. |
 | `clock.position` | Index that the next `next()` call will return. |
 | `clock.timestampAt(frame)` | Rounded start timestamp, in microseconds. |
 | `clock.at(frame)` | Frozen `{ frame, timestamp, duration }`, without moving the clock. |
@@ -58,11 +58,14 @@ Use `frameRate(30000, 1001)` for that exact ratio. `frameRate(2997, 100)` repres
 | `clock.seek(frame)` | Sets the next frame index. Validates the entire frame interval first. |
 | `clock.reset()` | Returns the clock to frame zero. |
 
-All indices and timestamps must be nonnegative safe integers. Rate components
-must be positive safe integers. Rates above 1,000,000 fps are rejected because
-microsecond intervals would collapse. Invalid numeric inputs and unrepresentable
-boundaries throw `RangeError`. `at`, `seek`, and `next` require the following
-boundary to be representable too. A failed seek or advance leaves position intact.
+All indices and timestamps must be nonnegative safe integers; `-0` is treated as
+`0`. Rate components must be positive safe integers. Rates above 1,000,000 fps
+are rejected because microsecond intervals would collapse, and so are rates too
+slow for frame zero to end at a safe timestamp. Invalid numeric inputs and
+unrepresentable boundaries throw `RangeError`. `at`, `seek`, and `next` require
+the following boundary to be representable too. `frameAt` does not, so for the
+last timestamps in range it can return an index that `seek` rejects. A failed
+seek or advance leaves position intact.
 
 ## Scope
 
@@ -71,7 +74,9 @@ elapsed time, parse SMPTE timecodes, implement drop-frame labels, resample media
 or synchronize audio. Drop-frame labeling is distinct from fractional frame rates.
 
 The build is ESM with TypeScript declarations and requires BigInt support.
-Development is tested on Node.js; browser integration has not yet been tested.
+Node.js versions that can `require()` ES modules (22.12 and later) can also load
+it with `require`. Development is tested on Node.js; browser integration has not
+yet been tested.
 
 ## Local package check
 
@@ -81,3 +86,7 @@ npm pack
 
 Packing builds the package first. `private: true` intentionally prevents npm
 publication while the project is under review.
+
+## License
+
+MIT

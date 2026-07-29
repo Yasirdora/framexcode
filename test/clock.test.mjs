@@ -2,13 +2,17 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { FrameClock, frameRate } from '../dist/index.js';
 
-test('rates are reduced and detached from caller-owned objects', () => {
+test('rates are reduced, read-only, and detached from caller-owned objects', () => {
   assert.deepEqual(frameRate(60000, 2002), { numerator: 30000, denominator: 1001 });
   assert.ok(Object.isFrozen(frameRate(24)));
   const input = { numerator: 24, denominator: 1 };
   const clock = new FrameClock(input);
   input.numerator = 60;
   assert.equal(clock.timestampAt(24), 1000000);
+  assert.deepEqual(new FrameClock({ numerator: 60000, denominator: 2002 }).rate, { numerator: 30000, denominator: 1001 });
+  assert.ok(Object.isFrozen(clock.rate));
+  assert.throws(() => { clock.rate = frameRate(60); }, TypeError);
+  assert.deepEqual(clock.rate, { numerator: 24, denominator: 1 });
 });
 
 test('invalid rates and indices fail explicitly', () => {
@@ -17,6 +21,7 @@ test('invalid rates and indices fail explicitly', () => {
     assert.throws(() => frameRate(30, value), RangeError);
   }
   assert.throws(() => new FrameClock(frameRate(1000001)), RangeError);
+  assert.throws(() => new FrameClock(frameRate(1, 9007199255)), RangeError);
   const clock = new FrameClock(frameRate(30));
   for (const value of [-1, 0.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
     for (const method of ['at', 'timestampAt', 'frameAt', 'seek']) {
@@ -73,14 +78,25 @@ test('reads do not advance; seeking reproduces the same sequence', () => {
   assert.equal(clock.position, 0);
 });
 
+test('negative zero is treated as frame zero', () => {
+  // assert/strict compares with Object.is, so a leaked -0 would not equal 0.
+  const clock = new FrameClock(frameRate(24));
+  assert.deepEqual(clock.at(-0), { frame: 0, timestamp: 0, duration: 41667 });
+  clock.seek(-0);
+  assert.equal(clock.position, 0);
+  assert.equal(clock.next().frame, 0);
+});
+
 test('safe-integer limits fail without advancing the clock', () => {
   const max = Number.MAX_SAFE_INTEGER;
   const clock = new FrameClock(frameRate(1000000));
   assert.equal(clock.timestampAt(max), max);
   assert.equal(clock.frameAt(max), max);
+  assert.throws(() => clock.seek(clock.frameAt(max)), RangeError);
   clock.seek(max - 1);
   assert.equal(clock.next().timestamp, max - 1);
   assert.throws(() => clock.next(), RangeError);
   assert.equal(clock.position, max);
   assert.throws(() => new FrameClock(frameRate(1)).timestampAt(max), RangeError);
+  assert.equal(new FrameClock(frameRate(1, 9007199254)).at(0).duration, 9007199254000000);
 });
