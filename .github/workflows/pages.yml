@@ -1,0 +1,51 @@
+name: Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      # Mirror the repository layout so the demo's ../../dist/index.js import resolves.
+      - name: Assemble site
+        run: |
+          mkdir -p _site/examples/webcodecs
+          cp -r dist _site/dist
+          cp examples/webcodecs/index.html _site/examples/webcodecs/
+          cat > _site/index.html <<'HTML'
+          <!doctype html>
+          <meta charset="utf-8">
+          <title>framecode</title>
+          <meta http-equiv="refresh" content="0; url=examples/webcodecs/">
+          <a href="examples/webcodecs/">framecode WebCodecs demo</a>
+          HTML
+      - uses: actions/upload-pages-artifact@v3
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}examples/webcodecs/
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
