@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Yasirdora/framexcode/actions/workflows/ci.yml/badge.svg)](https://github.com/Yasirdora/framexcode/actions/workflows/ci.yml)
 
-Frame-indexed timestamps for fixed-rate media.
+Frame-indexed timestamps for fixed-rate media. [Try the live demo](https://yasirdora.github.io/framexcode/examples/webcodecs/).
 
 `framecode` converts frame numbers to integer microseconds. It accepts rational
 frame rates, calculates each boundary independently, and lets an export loop
@@ -22,6 +22,8 @@ export runs.
 
 ## Browser demo
 
+**Live:** [yasirdora.github.io/framexcode/examples/webcodecs/](https://yasirdora.github.io/framexcode/examples/webcodecs/)
+
 [`examples/webcodecs/`](examples/webcodecs/) draws 10 seconds of canvas animation
 at 30000/1001 fps and encodes it with the WebCodecs `VideoEncoder`. Each
 `VideoFrame` takes its `timestamp` and `duration` from `FrameClock.next()`. The
@@ -29,12 +31,14 @@ page then writes the encoded chunks to a downloadable WebM without any
 dependencies. The file's timestamp scale is one microsecond, so it stores
 framecode's values unchanged.
 
+To run it locally:
+
 ```sh
 npm run demo
 ```
 
-Open http://localhost:8080/examples/webcodecs/ in a Chromium-based browser. The
-page compares framecode with the rounded-duration shortcut described in
+Then open http://localhost:8080/examples/webcodecs/ in a Chromium-based browser.
+The page compares framecode with the rounded-duration shortcut described in
 [Why](#why). The shortcut drifts 100 µs over the 300-frame clip and 35,964 µs
 (1.08 frames) over an hour.
 
