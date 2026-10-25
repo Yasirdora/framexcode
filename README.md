@@ -20,6 +20,24 @@ ahead, more than a whole frame.
 timestamp is within half a microsecond of the exact value, however long the
 export runs.
 
+## Browser demo
+
+[`examples/webcodecs/`](examples/webcodecs/) draws 10 seconds of canvas animation
+at 30000/1001 fps and encodes it with the WebCodecs `VideoEncoder`. Each
+`VideoFrame` takes its `timestamp` and `duration` from `FrameClock.next()`. The
+page then writes the encoded chunks to a downloadable WebM without any
+dependencies. The file's timestamp scale is one microsecond, so it stores
+framecode's values unchanged.
+
+```sh
+npm run demo
+```
+
+Open http://localhost:8080/examples/webcodecs/ in a Chromium-based browser. The
+page compares framecode with the rounded-duration shortcut described in
+[Why](#why). The shortcut drifts 100 µs over the 300-frame clip and 35,964 µs
+(1.08 frames) over an hour.
+
 ## Example
 
 ```js
@@ -89,8 +107,8 @@ or synchronize audio. Drop-frame labeling is distinct from fractional frame rate
 
 The build is ESM with TypeScript declarations and requires BigInt support.
 Node.js versions that can `require()` ES modules (22.12 and later) can also load
-it with `require`. Development is tested on Node.js; browser integration has not
-yet been tested.
+it with `require`. Unit tests run on Node.js. The browser demo has been run in
+Chromium.
 
 ## Local package check
 

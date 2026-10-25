@@ -21,6 +21,7 @@
     "build": "tsc -p tsconfig.json",
     "test": "npm run build && node --test test/*.test.mjs",
     "example": "npm run build && node examples/sequence.mjs",
+    "demo": "npm run build && node examples/webcodecs/serve.mjs",
     "prepack": "npm run build"
   },
   "devDependencies": {

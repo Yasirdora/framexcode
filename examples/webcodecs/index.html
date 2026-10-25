@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>framecode WebCodecs demo</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f6f7f9;
+    --surface: #ffffff;
+    --text: #1a1d23;
+    --muted: #5b6372;
+    --border: #e1e4ea;
+    --accent: #2f66f0;
+    --warn: #a35f00;
+    --good: #18794e;
+    --bad: #c0362c;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e1015;
+      --surface: #161a22;
+      --text: #e7eaf0;
+      --muted: #98a1b2;
+      --border: #272d39;
+      --accent: #74a0ff;
+      --warn: #f2ab45;
+      --good: #4cc38a;
+      --bad: #ff6b5e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { max-width: 960px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 1.75rem; margin: 0 0 8px; letter-spacing: -0.01em; }
+  h2 { font-size: 1.1rem; margin: 0 0 12px; }
+  p { margin: 0 0 12px; }
+  .lede { color: var(--muted); max-width: 70ch; }
+  code { font-family: var(--mono); font-size: 0.9em; }
+  section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-top: 20px;
+  }
+  canvas, video {
+    display: block;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    border-radius: 8px;
+    background: #10131a;
+  }
+  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 14px; }
+  button, .download {
+    font: inherit;
+    font-weight: 600;
+    padding: 8px 16px;
+    border-radius: 8px;
+    border: 1px solid var(--accent);
+    background: var(--accent);
+    color: #fff;
+    cursor: pointer;
+    text-decoration: none;
+  }
+  .download { background: transparent; color: var(--accent); }
+  button:disabled { opacity: 0.5; cursor: default; }
+  [hidden] { display: none !important; }
+  #status { color: var(--muted); font-variant-numeric: tabular-nums; }
+  #status.error { color: var(--bad); }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { padding: 8px 10px; text-align: right; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  thead th { color: var(--muted); font-weight: 600; font-size: 0.85rem; }
+  .drift td { font-family: var(--mono); font-size: 0.92rem; }
+  .drift td:first-child { font-family: inherit; font-size: 1rem; }
+  .fc { color: var(--accent); }
+  .naive { color: var(--warn); }
+  @media (max-width: 640px) {
+    .drift thead { display: none; }
+    .drift, .drift tbody { display: block; }
+    .drift tr { display: block; padding: 6px 0; border-bottom: 1px solid var(--border); }
+    .drift td { display: flex; flex-wrap: wrap; justify-content: space-between; column-gap: 12px; border: 0; padding: 3px 0; white-space: normal; font-size: 0.85rem; }
+    .drift td:first-child { font-weight: 600; }
+    .drift td[data-label]::before { content: attr(data-label); color: var(--muted); font-family: system-ui, sans-serif; }
+  }
+  .note { color: var(--muted); font-size: 0.92rem; margin: 12px 0 0; }
+  .chunks { max-height: 320px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; }
+  .chunks table { font-family: var(--mono); font-size: 0.85rem; }
+  .chunks thead th { position: sticky; top: 0; background: var(--surface); }
+  .ok { color: var(--good); }
+  .mismatch { color: var(--bad); }
+</style>
+</head>
+<body>
+<main>
+  <h1>framecode × WebCodecs</h1>
+  <p class="lede">
+    This page draws 10 seconds of animation at 30000/1001 fps and encodes it in the
+    browser with <code>VideoEncoder</code>. Every <code>VideoFrame</code> gets its
+    <code>timestamp</code> and <code>duration</code> from <code>FrameClock.next()</code>.
+    Both values are in microseconds, the same unit that framecode uses.
+  </p>
+
+  <section>
+    <canvas id="canvas" width="1280" height="720"></canvas>
+    <div class="controls">
+      <button id="run" type="button" disabled>Encode again</button>
+      <a id="download" class="download" download="framecode-demo.webm" hidden>Download WebM</a>
+      <span id="status" role="status">Loading…</span>
+    </div>
+  </section>
+
+  <section>
+    <h2>Accumulated drift</h2>
+    <div class="table-wrap">
+      <table class="drift">
+        <thead>
+          <tr><th></th><th class="fc">framecode</th><th class="naive">+33,367 µs per frame</th><th>Drift</th></tr>
+        </thead>
+        <tbody>
+          <tr><td id="clip-label">This clip</td><td id="clip-fc" class="fc" data-label="framecode">–</td><td id="clip-naive" class="naive" data-label="+33,367 µs per frame">–</td><td id="clip-drift" data-label="Drift">–</td></tr>
+          <tr><td id="hour-label">One hour</td><td id="hour-fc" class="fc" data-label="framecode">–</td><td id="hour-naive" class="naive" data-label="+33,367 µs per frame">–</td><td id="hour-drift" data-label="Drift">–</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">
+      The exact frame period is 1,001,000 / 30 = 33,366.67 µs. If you round it once
+      to 33,367 µs and add that for every frame, each frame ends up 1/3 µs late.
+      framecode rounds each boundary from the exact ratio, so every boundary is
+      within 0.5 µs of the exact time at any length.
+    </p>
+  </section>
+
+  <section>
+    <h2>Encoded chunks</h2>
+    <p id="summary" class="note">Waiting for the encoder.</p>
+    <div class="chunks">
+      <table>
+        <thead>
+          <tr><th>Chunk</th><th>Type</th><th>Timestamp µs</th><th>Duration µs</th><th>Bytes</th><th>frameAt</th><th>Matches</th></tr>
+        </thead>
+        <tbody id="chunk-rows"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="player" hidden>
+    <h2>Muxed WebM</h2>
+    <video id="video" controls muted playsinline></video>
+    <p id="video-note" class="note"></p>
+  </section>
+</main>
+
+<script type="module">
+import { FrameClock, frameRate } from '../../dist/index.js';
+
+const RATE = frameRate(30000, 1001);
+const FRAMES = 300; // 10.01 s
+const NAIVE = 33_367; // 1,001,000 / 30 µs, rounded once
+const HOUR = 3_600_000_000; // µs
+const WIDTH = 1280;
+const HEIGHT = 720;
+const CODECS = [
+  { codec: 'vp09.00.31.08', name: 'VP9', webm: 'V_VP9' },
+  { codec: 'vp8', name: 'VP8', webm: 'V_VP8' },
+  { codec: 'avc1.42001f', name: 'H.264', webm: null }, // No muxer without a dependency.
+];
+
+const $ = (id) => document.getElementById(id);
+const canvas = $('canvas');
+const ctx = canvas.getContext('2d');
+const number = new Intl.NumberFormat('en-US');
+const micros = (value) => `${number.format(value)} µs`;
+const frames = (microseconds) => microseconds * RATE.numerator / (RATE.denominator * 1_000_000);
+const clipEnd = new FrameClock(RATE).timestampAt(FRAMES);
+let objectUrl = null;
+
+function setStatus(text, error = false) {
+  $('status').textContent = text;
+  $('status').classList.toggle('error', error);
+}
+
+function showDrift(row, count, exact) {
+  const naive = count * NAIVE;
+  $(`${row}-fc`).textContent = micros(exact);
+  $(`${row}-naive`).textContent = micros(naive);
+  $(`${row}-drift`).textContent =
+    `+${micros(naive - exact)} · ${frames(naive - exact).toFixed(3)} frames`;
+}
+
+{
+  // Frames that end within the first hour: the hour mark falls inside the next one.
+  const clock = new FrameClock(RATE);
+  const count = clock.frameAt(HOUR);
+  $('hour-label').textContent = `One hour · ${number.format(count)} frames`;
+  showDrift('hour', count, clock.timestampAt(count));
+}
+
+function draw({ frame, timestamp, duration }) {
+  ctx.fillStyle = '#10131a';
+  ctx.fillRect(0, 0, WIDTH, HEIGHT);
+
+  // The hand turns once per second of media time.
+  const [cx, cy, r] = [310, 320, 200];
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = '#2a3140';
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, 2 * Math.PI);
+  ctx.stroke();
+  for (let i = 0; i < 12; i++) {
+    const a = i * Math.PI / 6;
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.cos(a) * (r - 24), cy + Math.sin(a) * (r - 24));
+    ctx.lineTo(cx + Math.cos(a) * (r - 10), cy + Math.sin(a) * (r - 10));
+    ctx.stroke();
+  }
+  const angle = (timestamp % 1_000_000) / 1_000_000 * 2 * Math.PI - Math.PI / 2;
+  ctx.strokeStyle = '#74a0ff';
+  ctx.lineWidth = 12;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.lineTo(cx + Math.cos(angle) * (r - 40), cy + Math.sin(angle) * (r - 40));
+  ctx.stroke();
+  ctx.fillStyle = '#e7eaf0';
+  ctx.font = '600 44px ui-monospace, Menlo, monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText(`${Math.floor(timestamp / 1_000_000)}s`, cx, cy + 110);
+
+  ctx.textAlign = 'left';
+  ctx.font = '600 72px ui-monospace, Menlo, monospace';
+  ctx.fillText(`frame ${frame}`, 600, 200);
+  ctx.font = '28px ui-monospace, Menlo, monospace';
+  ctx.fillStyle = '#98a1b2';
+  ctx.fillText('timestamp', 600, 270);
+  ctx.fillText('duration', 600, 390);
+  ctx.font = '600 52px ui-monospace, Menlo, monospace';
+  ctx.fillStyle = '#e7eaf0';
+  ctx.fillText(micros(timestamp), 600, 330);
+  // Durations alternate between 33,367 and 33,366 µs; the short ones stand out.
+  ctx.fillStyle = duration === NAIVE ? '#e7eaf0' : '#f2ab45';
+  ctx.fillText(micros(duration), 600, 450);
+
+  const end = (timestamp + duration) / clipEnd;
+  ctx.fillStyle = '#232a36';
+  ctx.fillRect(80, 610, WIDTH - 160, 14);
+  ctx.fillStyle = '#74a0ff';
+  ctx.fillRect(80, 610, (WIDTH - 160) * end, 14);
+  ctx.fillStyle = '#98a1b2';
+  ctx.font = '24px ui-monospace, Menlo, monospace';
+  ctx.fillText('30000/1001 fps', 80, 670);
+  ctx.textAlign = 'right';
+  ctx.fillText(`${(clipEnd / 1_000_000).toFixed(2)} s`, WIDTH - 80, 670);
+}
+
+async function pickConfig() {
+  for (const candidate of CODECS) {
+    const config = {
+      codec: candidate.codec,
+      width: WIDTH,
+      height: HEIGHT,
+      bitrate: 2_000_000,
+      framerate: RATE.numerator / RATE.denominator,
+    };
+    const { supported } = await VideoEncoder.isConfigSupported(config).catch(() => ({}));
+    if (supported) return { config, ...candidate };
+  }
+  throw new Error('No VP9, VP8, or H.264 encoder is available.');
+}
+
+async function encode() {
+  const { config, name, webm: codecId } = await pickConfig();
+  const chunks = [];
+  let failure = null;
+  const encoder = new VideoEncoder({
+    output(chunk) {
+      const data = new Uint8Array(chunk.byteLength);
+      chunk.copyTo(data);
+      chunks.push({ type: chunk.type, timestamp: chunk.timestamp, duration: chunk.duration, data });
+    },
+    error(error) {
+      failure = error;
+    },
+  });
+  encoder.configure(config);
+
+  const clock = new FrameClock(RATE);
+  const started = performance.now();
+  for (let i = 0; i < FRAMES; i++) {
+    const timing = clock.next();
+    draw(timing);
+    const frame = new VideoFrame(canvas, { timestamp: timing.timestamp, duration: timing.duration });
+    encoder.encode(frame, { keyFrame: i % 150 === 0 });
+    frame.close();
+
+    const total = timing.timestamp + timing.duration;
+    $('clip-label').textContent = `This clip · ${number.format(i + 1)} frames`;
+    showDrift('clip', i + 1, total);
+    setStatus(`Encoding ${name}: frame ${i + 1} of ${FRAMES}`);
+
+    // Backpressure, plus a macrotask so the canvas can repaint.
+    if (encoder.encodeQueueSize > 4)
+      await new Promise((resolve) => encoder.addEventListener('dequeue', resolve, { once: true }));
+    await new Promise((resolve) => setTimeout(resolve));
+    if (failure) throw failure;
+  }
+  await encoder.flush().catch((error) => { throw failure ?? error; });
+  encoder.close();
+  return { chunks, name, codecId, seconds: (performance.now() - started) / 1000 };
+}
+
+function showChunks(chunks) {
+  const clock = new FrameClock(RATE);
+  const rows = [];
+  let matches = 0;
+  let keys = 0;
+  for (const [i, chunk] of chunks.entries()) {
+    // Recover the frame index from the timestamp, then check both fields.
+    const frame = clock.frameAt(chunk.timestamp);
+    const expected = clock.at(frame);
+    const ok = frame === i && expected.timestamp === chunk.timestamp && expected.duration === chunk.duration;
+    if (ok) matches++;
+    if (chunk.type === 'key') keys++;
+    const row = document.createElement('tr');
+    for (const value of [i, chunk.type, number.format(chunk.timestamp),
+      chunk.duration === null ? '–' : number.format(chunk.duration),
+      number.format(chunk.data.byteLength), frame, ok ? '✓' : '✗']) {
+      const cell = document.createElement('td');
+      cell.textContent = value;
+      row.append(cell);
+    }
+    row.lastChild.className = ok ? 'ok' : 'mismatch';
+    rows.push(row);
+  }
+  $('chunk-rows').replaceChildren(...rows);
+  $('summary').textContent = `${chunks.length} chunks, ${keys} key frames. ` +
+    (matches === chunks.length
+      ? 'Every chunk carries the timestamp and duration that FrameClock assigned to its frame.'
+      : `${chunks.length - matches} chunks differ from FrameClock.`);
+  return matches === chunks.length;
+}
+
+// Minimal WebM writer: one video track and one cluster per frame. A timestamp
+// scale of 1,000 ns makes every Matroska timestamp a microsecond, so the file
+// stores FrameClock values unchanged. Block timestamps are int16 offsets from
+// their cluster, which only covers 32 ms at this scale, so each frame starts a
+// new cluster.
+function webm({ codecId, width, height, duration, chunks }) {
+  const concat = (parts) => {
+    const out = new Uint8Array(parts.reduce((sum, part) => sum + part.length, 0));
+    let offset = 0;
+    for (const part of parts) {
+      out.set(part, offset);
+      offset += part.length;
+    }
+    return out;
+  };
+  const bytes = (n, length = 1) => {
+    const out = [];
+    do {
+      out.unshift(n % 256);
+      n = Math.floor(n / 256);
+    } while (n > 0 || out.length < length);
+    return out;
+  };
+  const size = (n) => {
+    let length = 1;
+    while (n >= 2 ** (7 * length) - 1) length++; // All ones means "unknown size".
+    const out = bytes(n, length);
+    out[0] |= 0x80 >> (length - 1);
+    return out;
+  };
+  const element = (id, ...body) => {
+    const data = concat(body);
+    return concat([Uint8Array.from(bytes(id)), Uint8Array.from(size(data.length)), data]);
+  };
+  const uint = (id, n) => element(id, Uint8Array.from(bytes(n)));
+  const text = (id, s) => element(id, new TextEncoder().encode(s));
+  const float = (id, x) => {
+    const data = new Uint8Array(8);
+    new DataView(data.buffer).setFloat64(0, x);
+    return element(id, data);
+  };
+
+  const header = element(0x1a45dfa3,
+    uint(0x4286, 1), uint(0x42f7, 1), uint(0x42f2, 4), uint(0x42f3, 8),
+    text(0x4282, 'webm'), uint(0x4287, 2), uint(0x4285, 2));
+  const info = element(0x1549a966,
+    uint(0x2ad7b1, 1000), float(0x4489, duration),
+    text(0x4d80, 'framecode'), text(0x5741, 'framecode WebCodecs demo'));
+  const tracks = element(0x1654ae6b, element(0xae,
+    uint(0xd7, 1), uint(0x73c5, 1), uint(0x83, 1), text(0x86, codecId),
+    element(0xe0, uint(0xb0, width), uint(0xba, height))));
+  const clusters = chunks.map((chunk) => element(0x1f43b675,
+    uint(0xe7, chunk.timestamp),
+    // SimpleBlock: track 1, offset 0 from the cluster, keyframe flag.
+    element(0xa3, Uint8Array.of(0x81, 0, 0, chunk.type === 'key' ? 0x80 : 0), chunk.data)));
+  return new Blob([header, element(0x18538067, info, tracks, ...clusters)], { type: 'video/webm' });
+}
+
+async function run() {
+  $('run').disabled = true;
+  $('download').hidden = true;
+  $('player').hidden = true;
+  try {
+    const { chunks, name, codecId, seconds } = await encode();
+    const allMatch = showChunks(chunks);
+    const last = chunks.at(-1);
+    const done = `Encoded ${chunks.length} ${name} frames in ${seconds.toFixed(1)} s.`;
+    if (!allMatch) {
+      setStatus(`${done} Some chunk timings differ from FrameClock.`, true);
+    } else if (codecId) {
+      const blob = webm({ codecId, width: WIDTH, height: HEIGHT, duration: last.timestamp + last.duration, chunks });
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      objectUrl = URL.createObjectURL(blob);
+      $('download').href = objectUrl;
+      $('download').hidden = false;
+      $('video-note').textContent = `${number.format(blob.size)} bytes. Loading…`;
+      $('video').onloadedmetadata = () => {
+        $('video-note').textContent = `${number.format(blob.size)} bytes. ` +
+          `The browser reports a duration of ${$('video').duration.toFixed(3)} s.`;
+      };
+      $('video').src = objectUrl;
+      $('player').hidden = false;
+      setStatus(`${done} WebM ready.`);
+    } else {
+      setStatus(`${done} ${name} can't be muxed into WebM without a dependency, so there's no download.`);
+    }
+  } catch (error) {
+    console.error(error);
+    setStatus(error.message, true);
+  } finally {
+    $('run').disabled = false;
+  }
+}
+
+if ('VideoEncoder' in globalThis) {
+  $('run').addEventListener('click', run);
+  run();
+} else {
+  setStatus('This browser has no WebCodecs VideoEncoder. Try a recent Chrome, Edge, Safari, or Firefox.', true);
+}
+</script>
+</body>
+</html>
