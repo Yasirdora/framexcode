@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Yasirdora/framexcode/actions/workflows/ci.yml/badge.svg)](https://github.com/Yasirdora/framexcode/actions/workflows/ci.yml)
 
-Frame-indexed timestamps for fixed-rate media. [Try the live demo](https://yasirdora.github.io/framexcode/examples/webcodecs/).
+Frame-indexed timestamps for fixed-rate media. [Try the live demo](https://yasirdora.github.io/framexcode/).
 
 `framecode` converts frame numbers to integer microseconds. It accepts rational
 frame rates, calculates each boundary independently, and lets an export loop
@@ -22,7 +22,7 @@ export runs.
 
 ## Browser demo
 
-**Live:** [yasirdora.github.io/framexcode/examples/webcodecs/](https://yasirdora.github.io/framexcode/examples/webcodecs/)
+**Live:** [yasirdora.github.io/framexcode](https://yasirdora.github.io/framexcode/)
 
 [`examples/webcodecs/`](examples/webcodecs/) draws 10 seconds of canvas animation
 at 30000/1001 fps and encodes it with the WebCodecs `VideoEncoder`. Each

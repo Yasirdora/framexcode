@@ -25,18 +25,20 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-      # Mirror the repository layout so the demo's ../../dist/index.js import resolves.
+      # Serve the demo at the site root, with its library import pointed at ./dist.
+      # The old examples/webcodecs/ path redirects to the root.
       - name: Assemble site
         run: |
           mkdir -p _site/examples/webcodecs
           cp -r dist _site/dist
-          cp examples/webcodecs/index.html _site/examples/webcodecs/
-          cat > _site/index.html <<'HTML'
+          sed "s#'../../dist/index.js'#'./dist/index.js'#" examples/webcodecs/index.html > _site/index.html
+          grep -q "'./dist/index.js'" _site/index.html
+          cat > _site/examples/webcodecs/index.html <<'HTML'
           <!doctype html>
           <meta charset="utf-8">
           <title>framecode</title>
-          <meta http-equiv="refresh" content="0; url=examples/webcodecs/">
-          <a href="examples/webcodecs/">framecode WebCodecs demo</a>
+          <meta http-equiv="refresh" content="0; url=../../">
+          <a href="../../">framecode WebCodecs demo</a>
           HTML
       - uses: actions/upload-pages-artifact@v3
 
