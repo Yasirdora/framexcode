@@ -8,6 +8,8 @@ Frame-indexed timestamps for fixed-rate media. [Try the live demo](https://yasir
 frame rates, calculates each boundary independently, and lets an export loop
 advance or seek without relying on elapsed wall time. No runtime dependencies.
 
+[![The browser demo encoding 300 frames: framecode stays on the exact time while a fixed 33,367 µs duration drifts to +100 µs](docs/demo.gif)](https://yasirdora.github.io/framexcode/)
+
 ## Why
 
 A 29.97 fps video runs at exactly 30000/1001 fps, so each frame lasts
