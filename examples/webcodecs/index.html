@@ -275,6 +275,16 @@ const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 const WHITE = '#f5f5f7';
 const GRAY = '#8e8e93';
 const ORANGE = '#ff9f0a';
+const [LEFT, RIGHT, TOP, BASE] = [80, WIDTH - 80, 460, 620];
+
+// Distance of each frame's start from the exact time, for framecode and for the
+// fixed-duration shortcut. The chart's top line is +100 µs.
+const exactAt = (frame) => frame * RATE.denominator * 1_000_000 / RATE.numerator;
+const errors = Array.from({ length: FRAMES }, (_, frame) =>
+  [timeline.timestampAt(frame) - exactAt(frame), frame * NAIVE - exactAt(frame)]);
+const xAt = (frame) => LEFT + (RIGHT - LEFT) * frame / (FRAMES - 1);
+const yAt = (error) => BASE - (BASE - TOP) * error / 100;
+const signed = (error) => `${error < -0.05 ? '−' : '+'}${Math.abs(error).toFixed(1)} µs`;
 
 // Canvas text has no tabular figures, so digits get equal-width slots to keep
 // changing numbers from shifting sideways.
@@ -292,19 +302,21 @@ function tabular(text, x, y) {
   }
   return x;
 }
-function centered(text, x, y) {
-  tabular(text, x - tabularWidth(text) / 2, y);
-}
 
 function draw({ frame, timestamp, duration }) {
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
+  ctx.font = `500 24px ${FONT}`;
   ctx.fillStyle = GRAY;
+  ctx.textAlign = 'left';
+  ctx.fillText('30000/1001 fps', LEFT, 72);
+  const position = `Frame ${frame}  ·  ${micros(duration)}`;
+  tabular(position, RIGHT - tabularWidth(position), 72);
+
   ctx.font = `500 26px ${FONT}`;
   ctx.textAlign = 'center';
-  ctx.fillText('Timestamp', WIDTH / 2, 140);
-
+  ctx.fillText('Timestamp', WIDTH / 2, 176);
   const seconds = (timestamp / 1_000_000).toFixed(6);
   ctx.font = `600 150px ${FONT}`;
   const valueWidth = tabularWidth(seconds);
@@ -312,69 +324,84 @@ function draw({ frame, timestamp, duration }) {
   const unitWidth = ctx.measureText(' s').width;
   ctx.font = `600 150px ${FONT}`;
   ctx.fillStyle = WHITE;
-  const end = tabular(seconds, (WIDTH - valueWidth - unitWidth) / 2, 300);
+  const end = tabular(seconds, (WIDTH - valueWidth - unitWidth) / 2, 330);
   ctx.font = `500 56px ${FONT}`;
   ctx.fillStyle = GRAY;
   ctx.textAlign = 'left';
-  ctx.fillText(' s', end, 300);
+  ctx.fillText(' s', end, 330);
 
-  for (const [x, label, value, color] of [
-    [440, 'Frame', number.format(frame), WHITE],
-    [840, 'Duration', micros(duration), duration === NAIVE ? WHITE : ORANGE],
-  ]) {
-    ctx.font = `500 24px ${FONT}`;
-    ctx.fillStyle = GRAY;
-    ctx.textAlign = 'center';
-    ctx.fillText(label, x, 384);
-    ctx.font = `600 44px ${FONT}`;
-    ctx.fillStyle = color;
-    centered(value, x, 436);
-  }
-
-  // One cell per frame in the current block of 30. Short 33,366 µs frames are orange.
-  const first = frame - (frame % 30);
-  const [left, top, gap] = [80, 492, 6];
-  const cell = (WIDTH - 2 * left - 29 * gap) / 30;
-  for (let k = 0; k < 30 && first + k < FRAMES; k++) {
-    const f = first + k;
-    const short = timeline.at(f).duration !== NAIVE;
-    ctx.fillStyle = f > frame ? '#2c2c2e' : short ? ORANGE : f === frame ? WHITE : GRAY;
-    const grow = f === frame ? 6 : 0;
-    ctx.beginPath();
-    ctx.roundRect(left + k * (cell + gap), top - grow, cell, 48 + 2 * grow, 6);
-    ctx.fill();
-  }
-
+  // Chart header, with each series' current value in the legend.
   ctx.font = `500 22px ${FONT}`;
-  ctx.fillStyle = GRAY;
-  ctx.textAlign = 'left';
-  ctx.fillText(`Frames ${first}–${Math.min(first + 29, FRAMES - 1)}`, left, 584);
-  ctx.textAlign = 'right';
-  let x = WIDTH - left;
-  for (const [label, color] of [['33,366 µs', ORANGE], ['33,367 µs', GRAY]]) {
+  ctx.fillText('Distance from exact time', LEFT, 410);
+  let x = RIGHT;
+  for (const [label, error, color] of [
+    ['Fixed 33,367 µs', errors[frame][1], ORANGE],
+    ['framecode', errors[frame][0], WHITE],
+  ]) {
+    const value = signed(error);
+    ctx.font = `600 22px ${FONT}`;
+    ctx.fillStyle = color;
+    tabular(value, x - tabularWidth(value), 410);
+    x -= tabularWidth('+00.0 µs') + 10;
+    ctx.font = `500 22px ${FONT}`;
     ctx.fillStyle = GRAY;
-    ctx.fillText(label, x, 584);
-    x -= ctx.measureText(label).width + 12;
+    ctx.textAlign = 'right';
+    ctx.fillText(label, x, 410);
+    x -= ctx.measureText(label).width + 10;
     ctx.fillStyle = color;
     ctx.beginPath();
-    ctx.roundRect(x - 14, 584 - 15, 14, 14, 3);
+    ctx.roundRect(x - 20, 410 - 9, 20, 4, 2);
     ctx.fill();
-    x -= 40;
+    x -= 20 + 40;
   }
 
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.14)';
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.14)';
+  ctx.setLineDash([4, 8]);
   ctx.beginPath();
-  ctx.roundRect(left, 632, WIDTH - 2 * left, 4, 2);
-  ctx.fill();
-  ctx.fillStyle = WHITE;
+  ctx.moveTo(LEFT, TOP);
+  ctx.lineTo(RIGHT, TOP);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.24)';
   ctx.beginPath();
-  ctx.roundRect(left, 632, (WIDTH - 2 * left) * (timestamp + duration) / clipEnd, 4, 2);
-  ctx.fill();
+  ctx.moveTo(LEFT, BASE);
+  ctx.lineTo(RIGHT, BASE);
+  ctx.stroke();
+  ctx.font = `500 20px ${FONT}`;
   ctx.fillStyle = GRAY;
   ctx.textAlign = 'left';
-  ctx.fillText('30000/1001 fps', left, 676);
+  ctx.fillText('+100 µs', LEFT, TOP - 12);
+  ctx.fillText('Frame 0', LEFT, BASE + 36);
   ctx.textAlign = 'right';
-  ctx.fillText(`${(clipEnd / 1_000_000).toFixed(3)} s`, WIDTH - left, 676);
+  ctx.fillText(`Frame ${FRAMES - 1}`, RIGHT, BASE + 36);
+
+  const fill = ctx.createLinearGradient(0, TOP, 0, BASE);
+  fill.addColorStop(0, 'rgba(255, 159, 10, 0.34)');
+  fill.addColorStop(1, 'rgba(255, 159, 10, 0)');
+  ctx.beginPath();
+  ctx.moveTo(xAt(0), BASE);
+  for (let f = 0; f <= frame; f++) ctx.lineTo(xAt(f), yAt(errors[f][1]));
+  ctx.lineTo(xAt(frame), BASE);
+  ctx.fillStyle = fill;
+  ctx.fill();
+
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  for (const [series, color] of [[1, ORANGE], [0, WHITE]]) {
+    ctx.beginPath();
+    for (let f = 0; f <= frame; f++) ctx.lineTo(xAt(f), yAt(errors[f][series]));
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = color;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(xAt(frame), yAt(errors[frame][series]), 8, 0, 2 * Math.PI);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#000';
+    ctx.stroke();
+  }
 }
 
 async function pickConfig() {
